@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import warnings
 
+
 # Silenciar advertencias específicas
 warnings.filterwarnings("ignore", category=UserWarning, message="Found unknown categories in columns")
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -56,6 +57,10 @@ class RemoveBinaryDuplicates(utils.transformers.RemoveBinaryDuplicates):
 # 2) Función avanzada de evaluación (retorna figuras)
 # -------------------------------------------------------------------
 from utils.functions import evaluar_modelo_completo
+
+# Importar funciones auxiliares para la extraccion de variables
+
+#from utils.extract_url_features import extraer_variables_url
 
 # -------------------------------------------------------------------
 # 3) Función para mostrar métricas sencillas
@@ -189,7 +194,7 @@ def main():
         thr = st.session_state["threshold"]
     
     # Crear tabs
-    tab1, tab2, tab3, tab4 = st.tabs(["📄 Vista de Datos", "📊 Predicción & Métricas", "📈 Análisis Avanzado", "🆚 Comparativa Modelos"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📄 Vista de Datos", "📊 Predicción & Métricas", "📈 Análisis Avanzado", "🆚 Comparativa Modelos", "🔍 Predicción por URL"])
     
     # ---------------- TAB 1: Vista de Datos ----------------
     with tab1:
@@ -644,6 +649,41 @@ def main():
                     st.warning(f"El CSV debe contener al menos las columnas: {', '.join(required_cols)}")
             except Exception as e:
                 st.error(f"Error al procesar el archivo CSV: {e}")
+
+    # ---------------- TAB 5: Check URL ----------------
+    with tab5:
+        # Pestaña de predicción por URL
+        st.subheader("PROXIMAMENTE FUNCIONAL")
+        '''input_url = st.text_input("URL", placeholder="https://ejemplo.com")
+        
+        if st.button("Predecir"):
+            if input_url:
+                try:
+                    # Extraer variables de la URL
+                    df_url = extraer_variables_url(input_url)
+
+                    # Verificar si el pipeline y el modelo están cargados
+                    model = st.session_state.get("model", None)
+                    pipeline = st.session_state.get("pipeline", None)
+
+                    if pipeline is not None and model is not None:
+                        # Procesar con el pipeline
+                        df_processed = pipeline.transform(df_url)
+
+                        # Realizar predicción
+                        if hasattr(model, "predict_proba"):
+                            proba = model.predict_proba(df_processed)[:, 1][0]
+                            prediccion = "Phishing" if proba > 0.5 else "Legítima"
+                            st.success(f"La URL es: **{prediccion}**")
+                            st.write(f"**Probabilidad de Phishing:** {proba:.2f}")
+                        else:
+                            st.error("El modelo no soporta `predict_proba`.")
+                    else:
+                        st.error("Modelo o pipeline no cargados. Por favor, cárgalos en la barra lateral.")
+                except Exception as e:
+                    st.error(f"Error al procesar la URL: {e}")
+            else:
+                st.warning("Por favor, introduce una URL válida.")'''
 
 if __name__ == "__main__":
     main()
