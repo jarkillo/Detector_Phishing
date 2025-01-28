@@ -65,7 +65,7 @@ def mostrar_metricas(y_true, y_pred, proba=None):
     prec = precision_score(y_true, y_pred, zero_division=0)
     rec = recall_score(y_true, y_pred, zero_division=0)
     f1 = f1_score(y_true, y_pred, zero_division=0)
-    roc = roc_auc_score(y_true, proba) if proba is not None else None
+    roc = roc_auc_score(y_true, proba) if proba is not None and len(np.unique(proba)) > 1 else None
 
     st.write(f"**Accuracy:** {acc:.4f}")
     st.write(f"**Precisión:** {prec:.4f}")
@@ -73,6 +73,8 @@ def mostrar_metricas(y_true, y_pred, proba=None):
     st.write(f"**F1 Score:** {f1:.4f}")
     if roc is not None:
         st.write(f"**ROC AUC:** {roc:.4f}")
+    else:
+        st.write("**ROC AUC:** No disponible (proba insuficiente o `predict_proba` no soportado).")
 
 # -------------------------------------------------------------------
 # 4) Inicializar session_state si no existe
@@ -121,9 +123,6 @@ def cargar_dataset(ruta):
     """Carga el parquet en df_data."""
     try:
         df = pd.read_parquet(ruta)
-        # Eliminar columna 'ID' si existe para evitar mismatches
-        if "ID" in df.columns:
-            df.drop(columns=["ID"], inplace=True, errors="ignore")
         st.session_state["df_data"] = df
         st.success(f"Dataset '{ruta}' cargado con éxito. Shape: {df.shape}")
     except Exception as e:
@@ -200,17 +199,17 @@ def main():
             # Mostrar nombres de las columnas
             st.write("**Nombres de las columnas en el dataset:**")
             st.write(df_data.columns.tolist())
-    
+
             # Definir las columnas a mostrar
             cols_to_display = []
             if 'status' in df_data.columns and 'url' in df_data.columns:
                 cols_to_display = ['url', 'status']
             elif 'url' in df_data.columns:
                 cols_to_display = ['url']
-            
+
             if 'ID' in df_data.columns:
                 cols_to_display = ['ID'] + cols_to_display
-    
+
             # Mostrar las columnas seleccionadas si existen
             missing_cols = [col for col in cols_to_display if col not in df_data.columns]
             if not missing_cols:
@@ -231,21 +230,6 @@ def main():
         threshold = st.session_state.get("threshold", 0.5)
 
         if df_data is not None and model is not None and pipeline is not None:
-            # Crear una copia para mostrar, manteniendo 'ID', 'url' y 'status'
-            cols_to_display = []
-            if 'ID' in df_data.columns:
-                cols_to_display = ['ID']
-            if 'url' in df_data.columns:
-                cols_to_display.append('url')
-            if 'status' in df_data.columns:
-                cols_to_display.append('status')
-
-            try:
-                df_display = df_data[cols_to_display].copy()
-            except KeyError as e:
-                st.error(f"Error al seleccionar las columnas para mostrar: {e}")
-                df_display = pd.DataFrame()
-
             # Crear una copia para el modelo, eliminando 'ID' si existe
             df_model = df_data.copy()
             if "ID" in df_model.columns:
@@ -259,41 +243,54 @@ def main():
                 y_test = None
                 X_test = df_model
 
-            # Transformar
+            # Transformar los datos usando el pipeline **solo las características predictoras**
             try:
                 X_test_proc = pipeline.transform(X_test)
-                st.session_state["X_test"] = X_test  # Guardar para análisis
-                st.session_state["X_test_proc"] = X_test_proc  # Guardar para análisis
-            except Exception as e:
-                st.error(f"Error al transformar los datos: {e}")
-                X_test_proc = None
-
-            if X_test_proc is not None:
-                # Asegurarse de que X_test_proc es un DataFrame con nombres de columnas
                 if isinstance(X_test_proc, np.ndarray):
                     try:
                         X_test_proc = pd.DataFrame(X_test_proc, columns=pipeline.get_feature_names_out())
                     except AttributeError:
                         st.warning("El pipeline no tiene método `get_feature_names_out()`. Usando nombres genéricos de features.")
                         X_test_proc = pd.DataFrame(X_test_proc, columns=[f"Feature {i}" for i in range(X_test_proc.shape[1])])
-                
+                st.session_state["X_test_proc"] = X_test_proc  # Guardar para análisis
+            except Exception as e:
+                st.error(f"Error al transformar los datos: {e}")
+                X_test_proc = None
+
+            if X_test_proc is not None:
                 # Predicción con umbral
                 try:
-                    y_proba = model.predict_proba(X_test_proc)[:, 1]
-                    y_pred = (y_proba >= threshold).astype(int)
-                except AttributeError:
-                    y_proba = None
-                    y_pred = model.predict(X_test_proc)
+                    if hasattr(model, "predict_proba"):
+                        y_proba = model.predict_proba(X_test_proc)[:, 1]
+                        y_pred = (y_proba >= threshold).astype(int)
+                    else:
+                        st.warning("El modelo no soporta `predict_proba`. Se usará `predict` para generar las predicciones.")
+                        y_pred = model.predict(X_test_proc)
+                        y_proba = None
                 except Exception as e:
                     st.error(f"Error en predict_proba/predict: {e}")
                     y_pred = None
+                    y_proba = None
 
                 if y_pred is not None:
                     # Añadir las predicciones al dataframe de display
+                    df_display = df_data.copy()
+
+                    # Verificar qué columnas existen antes de usarlas
+                    cols_to_display = []
+                    for col in ['ID', 'url', 'status']:
+                        if col in df_display.columns:
+                            cols_to_display.append(col)
+
+                    # Añadir 'Predicción' y 'Proba' al dataframe
                     df_display["Predicción"] = y_pred
+                    df_display["Proba"] = y_proba if y_proba is not None else None  # Pandas maneja `None` como NaN
+
+                    # Mostrar las predicciones
                     st.write("**Todas las Predicciones:**")
-                    st.dataframe(df_display.head(50))  # Mostrar las primeras 50 filas
-                    # **Botón para descargar todas las predicciones**
+                    st.dataframe(df_display[cols_to_display + ["Predicción", "Proba"]].head(50))
+
+                    # Botón para descargar todas las predicciones
                     descargar_predicciones(df_display, key='download_all_predictions')
 
                     # Tabla de predicciones erróneas
@@ -303,49 +300,63 @@ def main():
                         if df_errors.empty:
                             st.success("¡No hay predicciones erróneas!")
                         else:
-                            st.dataframe(df_errors)  # Mostrar todas las filas de errores
+                            # Añadir 'Proba' si no está presente
+                            if 'Proba' not in df_errors.columns and y_proba is not None:
+                                df_errors["Proba"] = y_proba[df_errors.index]
+                            st.dataframe(df_errors[cols_to_display + ["Predicción", "Proba"]].head(50))  # Mostrar las primeras 50 filas
                             st.write(f"**Número Total de Errores:** {df_errors.shape[0]:,}")
                             # **Botón para descargar solo las predicciones erróneas**
                             descargar_predicciones(df_errors, key='download_error_predictions')
 
-                        st.write(f"**Umbral Actual:** {threshold:.2f}")
-                        mostrar_metricas(y_test, y_pred, proba=y_proba)
+                            st.write(f"**Umbral Actual:** {threshold:.2f}")
+                            mostrar_metricas(y_test, y_pred, proba=y_proba)
 
-                        # Matriz de confusión (tamaño reducido)
-                        cm = confusion_matrix(y_test, y_pred)
-                        fig_cm, ax_cm = plt.subplots(figsize=(5, 4))  # Tamaño reducido
-                        sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", ax=ax_cm, cbar=False)
-                        ax_cm.set_xlabel("Predicción")
-                        ax_cm.set_ylabel("Real")
-                        ax_cm.set_title("Matriz de Confusión")
-                        fig_cm.tight_layout()
-                        st.pyplot(fig_cm)
+                            # Matriz de confusión (tamaño reducido)
+                            cm = confusion_matrix(y_test, y_pred)
+                            fig_cm, ax_cm = plt.subplots(figsize=(5, 4))  # Tamaño reducido
+                            sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", ax=ax_cm, cbar=False)
+                            ax_cm.set_xlabel("Predicción")
+                            ax_cm.set_ylabel("Real")
+                            ax_cm.set_title("Matriz de Confusión")
+                            fig_cm.tight_layout()
+                            st.pyplot(fig_cm)
 
-                        # Gráfico de Barras para 'is_weird' basado en Predicción
-                        if 'is_weird' in X_test_proc.columns:
-                            st.write("**Proporción de Phishing en `is_weird`**")
-                            df_weird = pd.DataFrame({
-                                'is_weird': X_test_proc['is_weird'],
-                                'Phishing': y_pred  # Usar predicciones en lugar de 'status'
-                            })
-                            proportion_weird = df_weird.groupby('is_weird')['Phishing'].mean().reset_index()
-                            proportion_weird['Phishing'] = proportion_weird['Phishing'] * 100  # Convertir a porcentaje
-                            
-                            fig_weird, ax_weird = plt.subplots(figsize=(8, 6))
-                            sns.barplot(data=proportion_weird, x='is_weird', y='Phishing', ax=ax_weird)
-                            ax_weird.set_title("Proporción de Phishing por `is_weird`")
-                            ax_weird.set_xlabel("is_weird")
-                            ax_weird.set_ylabel("Proporción de Phishing (%)")
-                            for index, row in proportion_weird.iterrows():
-                                ax_weird.text(index, row.Phishing + 0.5, f"{row.Phishing:.2f}%", color='black', ha="center")
-                            fig_weird.tight_layout()
-                            st.pyplot(fig_weird)
-                        else:
-                            st.warning("La columna `is_weird` no está presente en los datos transformados.")
+                            # Gráfico de Barras para 'is_weird' basado en Predicción
+                            if 'is_weird' in X_test_proc.columns:
+                                st.write("**Proporción de Phishing en `is_weird`**")
+                                df_weird = pd.DataFrame({
+                                    'is_weird': X_test_proc['is_weird'],
+                                    'Phishing': y_pred  # Usar predicciones en lugar de 'status'
+                                })
+                                proportion_weird = df_weird.groupby('is_weird')['Phishing'].mean().reset_index()
+                                proportion_weird['Phishing'] = proportion_weird['Phishing'] * 100  # Convertir a porcentaje
+                                
+                                fig_weird, ax_weird = plt.subplots(figsize=(8, 6))
+                                sns.barplot(data=proportion_weird, x='is_weird', y='Phishing', ax=ax_weird)
+                                ax_weird.set_title("Proporción de Phishing por `is_weird`")
+                                ax_weird.set_xlabel("is_weird")
+                                ax_weird.set_ylabel("Proporción de Phishing (%)")
+                                for index, row in proportion_weird.iterrows():
+                                    ax_weird.text(index, row.Phishing + 0.5, f"{row.Phishing:.2f}%", color='black', ha="center")
+                                fig_weird.tight_layout()
+                                st.pyplot(fig_weird)
+                            else:
+                                st.warning("La columna `is_weird` no está presente en los datos transformados.")
+
+                            # **Agregar Gráfica de Número de Fallos por Probabilidad**
+                            if y_proba is not None:
+                                st.write("**Número de Fallos por Probabilidad de Predicción**")
+                                fig_failures_prob, ax_failures_prob = plt.subplots(figsize=(10, 6))
+                                sns.histplot(df_errors['Proba'], bins=20, kde=False, ax=ax_failures_prob, color='red')
+                                ax_failures_prob.set_title("Distribución de Probabilidades en Fallos")
+                                ax_failures_prob.set_xlabel("Probabilidad de Phishing")
+                                ax_failures_prob.set_ylabel("Número de Fallos")
+                                fig_failures_prob.tight_layout()
+                                st.pyplot(fig_failures_prob)
+                            else:
+                                st.info("No se puede generar la gráfica de fallos por probabilidad porque `predict_proba` no está disponible.")
                     else:
                         st.info("El dataset no contiene la columna 'status'. Se muestran solo predicciones.")
-                else:
-                    st.info("No se pudieron generar predicciones.")
         else:
             st.info("Debes cargar un dataset y haber cargado el modelo/pipeline para ver métricas.")
     
@@ -361,109 +372,91 @@ def main():
             if "status" not in df_data.columns:
                 st.warning("El dataset no contiene la columna 'status'. No se puede realizar el análisis avanzado.")
             else:
-                # Calcular el análisis avanzado una vez y almacenar en session_state
-                if not st.session_state["analisis_avanzado"]:
-                    if st.sidebar.button("Calcular Análisis Avanzado"):
+                # Crear una copia para el análisis, eliminando 'ID' si existe
+                df_model_analysis = df_data.copy()
+                if "ID" in df_model_analysis.columns:
+                    df_model_analysis.drop(columns=["ID"], inplace=True, errors="ignore")
+
+                # Separar características y variable objetivo
+                y_test = df_model_analysis["status"].values
+                X_test = df_model_analysis.drop(columns=["status"], errors="ignore")
+
+                # Transformar solo las características predictoras
+                try:
+                    X_test_proc = pipeline.transform(X_test)
+                    if isinstance(X_test_proc, np.ndarray):
                         try:
-                            df_copy = df_data.copy()
+                            X_test_proc = pd.DataFrame(X_test_proc, columns=pipeline.get_feature_names_out())
+                        except AttributeError:
+                            st.warning("El pipeline no tiene método `get_feature_names_out()`. Usando nombres genéricos de features.")
+                            X_test_proc = pd.DataFrame(X_test_proc, columns=[f"Feature {i}" for i in range(X_test_proc.shape[1])])
+                    st.session_state["X_test_proc"] = X_test_proc  # Guardar para análisis
+                except Exception as e:
+                    st.error(f"Error al transformar los datos: {e}")
+                    X_test_proc = None
 
-                            # Eliminar columna 'ID' si existe
-                            if "ID" in df_copy.columns:
-                                df_copy.drop(columns=["ID"], inplace=True, errors="ignore")
-
-                            y_test = df_copy["status"].values
-                            X_test = df_copy.drop(columns=["status"], errors="ignore")
-
-                            # Transformar
-                            try:
-                                X_test_proc = pipeline.transform(X_test)
-                                st.session_state["X_test_proc"] = X_test_proc  # Guardar para análisis
-                                st.session_state["X_test"] = X_test  # Guardar para análisis
-                            except Exception as e:
-                                st.error(f"Error al transformar los datos: {e}")
-                                X_test_proc = None
-
-                            if X_test_proc is not None:
-                                # Asegurarse de que X_test_proc es un DataFrame con nombres de columnas
-                                if isinstance(X_test_proc, np.ndarray):
-                                    try:
-                                        X_test_proc = pd.DataFrame(X_test_proc, columns=pipeline.get_feature_names_out())
-                                    except AttributeError:
-                                        st.warning("El pipeline no tiene método `get_feature_names_out()`. Usando nombres genéricos de features.")
-                                        X_test_proc = pd.DataFrame(X_test_proc, columns=[f"Feature {i}" for i in range(X_test_proc.shape[1])])
-
-                                # Llamar a la función de evaluación completa
-                                figs = evaluar_modelo_completo(model, X_test_proc, y_test, model_name="Phishing Demo")
-                                st.session_state["figuras_analisis_avanzado"] = figs
-                                st.session_state["y_test"] = y_test
-                                st.session_state["y_proba"] = model.predict_proba(X_test_proc)[:, 1]
-                                st.session_state["y_pred"] = (st.session_state["y_proba"] >= threshold).astype(int)
-                                st.session_state["analisis_avanzado"] = True
-                                st.success("Análisis avanzado calculado y almacenado.")
-                        except Exception as e:
-                            st.error(f"Error al calcular el análisis avanzado: {e}")
-
-                # Mostrar los gráficos almacenados
-                if st.session_state["analisis_avanzado"]:
-                    figs = st.session_state.get("figuras_analisis_avanzado", [])
-                    y_test = st.session_state.get("y_test", None)
-                    y_proba = st.session_state.get("y_proba", None)
-                    y_pred = st.session_state.get("y_pred", None)
-
-                    if figs:
-                        for i, fig in enumerate(figs, start=1):
-                            st.write(f"**Gráfico {i}**:")
-                            st.pyplot(fig)
-
-                        # Añadir análisis adicional: URLs donde el modelo falla
-                        st.markdown("---")
-                        st.subheader("Análisis de URLs donde el Modelo Falla")
-
-                        # Añadir las predicciones al dataframe para análisis
-                        df_analysis = df_data.copy()
-                        if "ID" in df_analysis.columns:
-                            df_analysis = df_analysis[['ID', 'url', 'status']].copy()
+                if X_test_proc is not None:
+                    # Predicciones
+                    try:
+                        if hasattr(model, "predict_proba"):
+                            y_proba = model.predict_proba(X_test_proc)[:, 1]
+                            y_pred = (y_proba >= threshold).astype(int)
                         else:
-                            df_analysis = df_analysis[['url', 'status']].copy()
+                            st.warning("El modelo no soporta `predict_proba`. Se usará `predict` para generar las predicciones.")
+                            y_pred = model.predict(X_test_proc)
+                            y_proba = None
+                    except Exception as e:
+                        st.error(f"Error en predict_proba/predict: {e}")
+                        y_pred = None
+                        y_proba = None
 
-                        # Transformar para predicción
-                        df_model_analysis = df_data.copy()
-                        if "ID" in df_model_analysis.columns:
-                            df_model_analysis.drop(columns=["ID"], inplace=True, errors="ignore")
+                    if y_pred is not None:
+                        # Llamar a la función de evaluación completa
+                        figs = evaluar_modelo_completo(model, X_test_proc, y_test, model_name="Phishing Demo")
+                        st.session_state["figuras_analisis_avanzado"] = figs
+                        st.session_state["y_test"] = y_test
+                        st.session_state["y_proba"] = y_proba
+                        st.session_state["y_pred"] = y_pred
+                        st.session_state["analisis_avanzado"] = True
+                        st.success("Análisis avanzado calculado y almacenado.")
 
-                        X_analysis = df_model_analysis.drop(columns=["status"], errors="ignore")
+                        # Mostrar los gráficos almacenados
+                        if st.session_state["analisis_avanzado"]:
+                            figs = st.session_state.get("figuras_analisis_avanzado", [])
+                            y_test = st.session_state.get("y_test", None)
+                            y_proba = st.session_state.get("y_proba", None)
+                            y_pred = st.session_state.get("y_pred", None)
 
-                        try:
-                            X_analysis_proc = pipeline.transform(X_analysis)
-                            st.session_state["X_test_proc"] = X_analysis_proc  # Guardar para análisis
-                            st.session_state["X_test"] = X_analysis  # Guardar para análisis
-                        except Exception as e:
-                            st.error(f"Error al transformar los datos: {e}")
-                            X_analysis_proc = None
+                            if figs:
+                                for i, fig in enumerate(figs, start=1):
+                                    st.write(f"**Gráfico {i}**:")
+                                    st.pyplot(fig)
 
-                        if X_analysis_proc is not None:
-                            # Asegurarse de que X_analysis_proc es un DataFrame con nombres de columnas
-                            if isinstance(X_analysis_proc, np.ndarray):
-                                try:
-                                    X_analysis_proc = pd.DataFrame(X_analysis_proc, columns=pipeline.get_feature_names_out())
-                                except AttributeError:
-                                    st.warning("El pipeline no tiene método `get_feature_names_out()`. Usando nombres genéricos de features.")
-                                    X_analysis_proc = pd.DataFrame(X_analysis_proc, columns=[f"Feature {i}" for i in range(X_analysis_proc.shape[1])])
+                                # Añadir análisis adicional: URLs donde el modelo falla
+                                st.markdown("---")
+                                st.subheader("Análisis de URLs donde el Modelo Falla")
 
-                            # Predicciones
-                            try:
-                                y_proba_analysis = model.predict_proba(X_analysis_proc)[:, 1]
-                                y_pred_analysis = (y_proba_analysis >= threshold).astype(int)
-                            except Exception as e:
-                                st.error(f"Error al generar predicciones para análisis: {e}")
-                                y_pred_analysis = None
+                                # Crear dataframe con predicciones
+                                df_analysis = df_data.copy()
+                                if "ID" in df_analysis.columns:
+                                    df_analysis = df_analysis[['ID', 'url', 'status']].copy()
+                                else:
+                                    df_analysis = df_analysis[['url', 'status']].copy()
 
-                            if y_pred_analysis is not None:
-                                df_analysis["Predicción"] = y_pred_analysis
+                                # Añadir las predicciones y probabilidades
+                                df_analysis["Predicción"] = y_pred
+                                if y_proba is not None:
+                                    df_analysis["Proba"] = y_proba
+                                else:
+                                    df_analysis["Proba"] = np.nan
                                 df_analysis["Correcto"] = df_analysis["status"] == df_analysis["Predicción"]
 
                                 # Seleccionar características numéricas y categóricas disponibles
-                                available_features = X_analysis.select_dtypes(include=[np.number, 'category']).columns.tolist()
+                                available_features = X_test.select_dtypes(include=[np.number, 'category']).columns.tolist()
+                                # Añadir 'is_weird' si está disponible
+                                if 'is_weird' in X_test_proc.columns and 'is_weird' not in available_features:
+                                    available_features.append('is_weird')
+
                                 if not available_features:
                                     st.warning("No hay características numéricas o categóricas disponibles para el análisis.")
                                 else:
@@ -471,7 +464,13 @@ def main():
 
                                     if selected_feature:
                                         # Añadir la característica al dataframe de análisis
-                                        df_analysis[selected_feature] = df_data[selected_feature]
+                                        if selected_feature in df_data.columns:
+                                            df_analysis[selected_feature] = df_data[selected_feature]
+                                        elif selected_feature in X_test_proc.columns:
+                                            df_analysis[selected_feature] = X_test_proc[selected_feature]
+                                        else:
+                                            st.warning(f"La característica seleccionada '{selected_feature}' no está disponible.")
+                                            df_analysis[selected_feature] = np.nan
 
                                         # Determinar si es numérica o categórica
                                         if pd.api.types.is_numeric_dtype(df_analysis[selected_feature]):
@@ -497,7 +496,6 @@ def main():
                                         # Calcular las proporciones de aciertos y errores por categoría
                                         df_grouped = df_analysis.groupby(feature_to_plot)["Correcto"].value_counts(normalize=True).unstack(fill_value=0)
 
-                                        
                                         # Renombrar las columnas para claridad
                                         if 'False' in df_grouped.columns and 'True' in df_grouped.columns:
                                             df_grouped.columns = ["Errores", "Aciertos"]
@@ -532,13 +530,9 @@ def main():
                                         # Mostrar proporciones globales
                                         st.write(f"**Proporción de Aciertos:** {np.mean(y_test == y_pred) * 100:.2f}%")
                                         st.write(f"**Proporción de Errores:** {100 - np.mean(y_test == y_pred) * 100:.2f}%")
+        else:
+            st.info("Debes cargar un dataset y haber cargado el modelo/pipeline para realizar el análisis avanzado.")
 
-                                        # **Eliminar el gráfico de 'is_weird' para evitar duplicación**
-                                        # Si deseas mantenerlo, asegúrate de que solo se muestre una vez.
-
-                else:
-                    st.info("Debes cargar un dataset y haber cargado el modelo/pipeline para realizar el análisis avanzado.")
-    
     # ---------------- TAB 4: Comparativa de Modelos ----------------
     with tab4:
         st.subheader("Comparación de Varios Modelos")
@@ -548,34 +542,34 @@ def main():
             try:
                 df_comp = pd.read_csv(comp_file)
                 st.dataframe(df_comp)
-    
+
                 # Mostrar información de las columnas
                 st.markdown("**Descripción de las Columnas:**")
                 st.write(df_comp.dtypes)
-    
+
                 # Verificar columnas necesarias
                 required_cols = {"Modelo", "Prueba", "F1-Validation"}
                 if required_cols.issubset(df_comp.columns):
                     # Mostrar valores únicos de "Prueba" para clarificación
                     st.markdown("**Valores Únicos de 'Prueba':**")
                     st.write(df_comp["Prueba"].unique())
-    
+
                     # Gráfico de barras con etiquetas para F1-Validation
                     fig_comp, ax_comp = plt.subplots(figsize=(14, 8))
                     sns.barplot(data=df_comp, x="Modelo", y="F1-Validation", hue="Prueba", ax=ax_comp)
                     ax_comp.set_title("Comparativa de F1-Validation")
                     ax_comp.set_xlabel("Modelo")
                     ax_comp.set_ylabel("F1-Validation")
-    
+
                     # Añadir etiquetas con los valores
                     for container in ax_comp.containers:
                         ax_comp.bar_label(container, fmt="%.3f", label_type='edge')
-    
+
                     # Ajustar la leyenda para que no tape el gráfico
                     ax_comp.legend(title="Prueba", loc='upper left', bbox_to_anchor=(1.0, 1))
                     fig_comp.tight_layout()
                     st.pyplot(fig_comp)
-    
+
                     # Gráfico adicional: Scatter plot de F1-Validation vs F1-Test si existe
                     if {"F1-Test"}.issubset(df_comp.columns):
                         fig_scatter, ax_scatter = plt.subplots(figsize=(10, 8))
@@ -583,16 +577,16 @@ def main():
                         ax_scatter.set_title("F1-Validation vs F1-Test por Modelo y Prueba")
                         ax_scatter.set_xlabel("F1-Validation")
                         ax_scatter.set_ylabel("F1-Test")
-    
+
                         # Añadir anotaciones para mejor claridad
                         for i in range(df_comp.shape[0]):
                             ax_scatter.text(df_comp["F1-Validation"].iloc[i]+0.001, df_comp["F1-Test"].iloc[i]+0.001,
                                             df_comp["Modelo"].iloc[i], horizontalalignment='left', size='small', color='black', weight='semibold')
-    
+
                         ax_scatter.legend(title="Prueba", loc='upper left', bbox_to_anchor=(1.0, 1))
                         fig_scatter.tight_layout()
                         st.pyplot(fig_scatter)
-    
+
                     # Gráfico adicional 1: Overfitting (Comparación de métricas entre Train, Validation y Test)
                     if {"F1-Train", "F1-Validation", "F1-Test"}.issubset(df_comp.columns):
                         fig_overfit, ax_overfit = plt.subplots(figsize=(14, 8))
@@ -601,15 +595,15 @@ def main():
                         ax_overfit.set_title("Comparación de F1-Score entre Train, Validation y Test")
                         ax_overfit.set_xlabel("Modelo")
                         ax_overfit.set_ylabel("F1-Score")
-    
+
                         # Añadir etiquetas con los valores
                         for container in ax_overfit.containers:
                             ax_overfit.bar_label(container, fmt="%.3f", label_type='edge')
-    
+
                         ax_overfit.legend(title="Conjunto", loc='upper left', bbox_to_anchor=(1.0, 1))
                         fig_overfit.tight_layout()
                         st.pyplot(fig_overfit)
-    
+
                     # Gráfico adicional 2: Intervalos de Confianza (Boxplot de métricas)
                     metrics = ["Accuracy", "Precision", "Recall", "F1-Validation", "F1-Test", "F1-Train"]
                     available_metrics = [metric for metric in metrics if metric in df_comp.columns]
@@ -620,30 +614,32 @@ def main():
                         ax_confidence.set_title("Intervalos de Confianza de las Métricas por Modelo")
                         ax_confidence.set_xlabel("Modelo")
                         ax_confidence.set_ylabel("Valor de la Métrica")
+
+                        # Añadir etiquetas con los valores
                         ax_confidence.legend(title="Métrica", loc='upper left', bbox_to_anchor=(1.0, 1))
                         fig_confidence.tight_layout()
                         st.pyplot(fig_confidence)
-    
+
                     # Gráfico adicional 3: Diferencia entre Test y Train
                     if {"F1-Train", "F1-Test"}.issubset(df_comp.columns):
                         df_overfit_diff = df_comp.copy()
-                        df_overfit_diff["Diferencia"] = df_overfit_diff["F1-Test"] - df_overfit_diff["F1-Train"]
-                        df_overfit_diff["Diferencia"] = df_overfit_diff["Diferencia"] * -1  # Multiplicar por -1
-    
+                        df_overfit_diff["Diferencia"] = abs(df_overfit_diff["F1-Test"] - df_overfit_diff["F1-Train"])
+
+
                         fig_diff, ax_diff = plt.subplots(figsize=(14, 8))
                         sns.barplot(data=df_overfit_diff, x="Modelo", y="Diferencia", hue="Prueba", ax=ax_diff)
                         ax_diff.set_title("Diferencia de F1-Score entre Test y Train")
                         ax_diff.set_xlabel("Modelo")
                         ax_diff.set_ylabel("Diferencia de F1-Score")
-    
+
                         # Añadir etiquetas con los valores
                         for container in ax_diff.containers:
                             ax_diff.bar_label(container, fmt="%.3f", label_type='edge')
-    
+
                         ax_diff.legend(title="Prueba", loc='upper left', bbox_to_anchor=(1.0, 1))
                         fig_diff.tight_layout()
                         st.pyplot(fig_diff)
-    
+
                 else:
                     st.warning(f"El CSV debe contener al menos las columnas: {', '.join(required_cols)}")
             except Exception as e:

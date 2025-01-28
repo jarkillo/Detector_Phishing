@@ -194,157 +194,88 @@ from sklearn.metrics import (
 import numpy as np
 import streamlit as st
 
-def evaluar_modelo_completo(modelo, X, y, model_name=""):
+def evaluar_modelo_completo(model, X_test, y_test, model_name="Modelo"):
     """
-    Evalúa completamente un modelo binario y retorna una lista de figuras.
+    Evalúa un modelo de clasificación y genera varias visualizaciones de rendimiento.
+
+    Args:
+        model: Modelo de clasificación ya entrenado.
+        X_test (pd.DataFrame o np.ndarray): Características de prueba.
+        y_test (array-like): Etiquetas verdaderas de prueba.
+        model_name (str): Nombre del modelo para etiquetas en las gráficas.
+
+    Returns:
+        list: Lista de figuras de matplotlib generadas.
     """
-    figs = []
-    
-    # 1) Obtener probabilidades
-    try:
-        y_proba = modelo.predict_proba(X)[:, 1]
-        # Verificar que y_proba tiene variedad
-        unique_probs = np.unique(y_proba)
-        print(f"[{model_name}] Valores únicos en y_proba: {unique_probs}")
-        if unique_probs.size <= 1:
-            st.warning(f"[{model_name}] `predict_proba` devuelve valores constantes. Las curvas ROC no se pueden generar.")
-            y_proba = None
-    except AttributeError:
+    figuras = []
+
+    # Predicciones y probabilidades
+    if hasattr(model, "predict_proba"):
+        y_proba = model.predict_proba(X_test)[:, 1]
+    else:
         y_proba = None
-        print(f"[{model_name}] AVISO: El modelo no soporta predict_proba(). Se usará predict() para la matriz de confusión.")
-    
-    # 2) Predicción con umbral=0.5
+    y_pred = model.predict(X_test)
+
+    # 1. Informe de Clasificación
+    report = classification_report(y_test, y_pred, output_dict=True, zero_division=0)
+    report_df = pd.DataFrame(report).T
+    # Filtramos para que solo se muestren las métricas más relevantes (evitamos 'accuracy' duplicado)
+    filtered_report_df = report_df.drop(['accuracy', 'macro avg', 'weighted avg'], errors='ignore')
+
+    fig_report, ax_report = plt.subplots(figsize=(10, 6))
+    sns.heatmap(
+        filtered_report_df.iloc[:, :-1],  # Solo mostramos columnas de métricas relevantes
+        annot=True,
+        fmt=".3f",  # Más decimales para mejor análisis
+        cmap="coolwarm",  # Más contraste en los colores
+        linewidths=0.5,  # Líneas separadoras más finas
+        cbar=True,  # Agregar barra de colores
+        ax=ax_report
+    )
+    ax_report.set_title(f"Informe de Clasificación - {model_name}")
+    ax_report.set_xlabel("Métrica")
+    ax_report.set_ylabel("Clase")
+    figuras.append(fig_report)
+
+    # 3. Curva ROC
     if y_proba is not None:
-        y_pred_05 = (y_proba >= 0.5).astype(int)
-    else:
-        y_pred_05 = modelo.predict(X)
-    
-    # 3) Matriz de confusión e informe (umbral=0.5)
-    cm_05 = confusion_matrix(y, y_pred_05)
-    print("\n=== [Umbral=0.5] Matriz de Confusión ===")
-    print(cm_05)
-    print("\n=== [Umbral=0.5] Classification Report ===")
-    print(classification_report(y, y_pred_05, digits=4))
-    
-    # Figura de la Matriz de Confusión con umbral=0.5
-    fig_cm_05, ax_cm_05 = plt.subplots(figsize=(5, 4))
-    sns.heatmap(cm_05, annot=True, fmt="d", cmap="Blues", ax=ax_cm_05, cbar=False)
-    ax_cm_05.set_xlabel("Predicción")
-    ax_cm_05.set_ylabel("Real")
-    ax_cm_05.set_title(f"Matriz de Confusión (umbral=0.5) - {model_name}")
-    figs.append(fig_cm_05)
-    plt.close(fig_cm_05)
-    
-    # Si no hay predict_proba, retornar las figuras generadas hasta ahora
-    if y_proba is None:
-        return figs
-    
-    # 4) Encontrar el umbral que maximiza F1
-    thresholds = np.linspace(0, 1, 101)
-    precision_list, recall_list, f1_list = [], [], []
-    
-    for thr in thresholds:
-        y_pred_thr = (y_proba >= thr).astype(int)
-        precision_list.append(precision_score(y, y_pred_thr, zero_division=0))
-        recall_list.append(recall_score(y, y_pred_thr, zero_division=0))
-        f1_list.append(f1_score(y, y_pred_thr, zero_division=0))
-    
-    precision_list = np.array(precision_list)
-    recall_list = np.array(recall_list)
-    f1_list = np.array(f1_list)
-    
-    best_idx = np.argmax(f1_list)
-    best_thr = thresholds[best_idx]
-    best_f1 = f1_list[best_idx]
-    
-    # Predicción con el mejor umbral
-    y_pred_best = (y_proba >= best_thr).astype(int)
-    cm_best = confusion_matrix(y, y_pred_best)
-    
-    print(f"\n=== Mejor umbral para F1: {best_thr:.2f} (F1={best_f1:.4f}) ===")
-    print("\n=== [Umbral que maximiza F1] Matriz de Confusión ===")
-    print(cm_best)
-    print("\n=== [Umbral que maximiza F1] Classification Report ===")
-    print(classification_report(y, y_pred_best, digits=4))
-    
-    # Figura de la Matriz de Confusión con el mejor umbral
-    fig_cm_best, ax_cm_best = plt.subplots(figsize=(5, 4))
-    sns.heatmap(cm_best, annot=True, fmt="d", cmap="Greens", ax=ax_cm_best, cbar=False)
-    ax_cm_best.set_xlabel("Predicción")
-    ax_cm_best.set_ylabel("Real")
-    ax_cm_best.set_title(f"Matriz de Confusión (umbral={best_thr:.2f}) - {model_name}")
-    figs.append(fig_cm_best)
-    plt.close(fig_cm_best)
-    
-    # Gráfico de Precisión, Recall y F1 Score vs umbral (Eliminar)
-    # **Eliminado según solicitud**
+        fpr, tpr, thresholds = roc_curve(y_test, y_proba)
+        roc_auc = auc(fpr, tpr)
 
-    # 6) Curva ROC
-    fpr, tpr, _ = roc_curve(y, y_proba)
-    roc_auc = auc(fpr, tpr)
-    fig_roc, ax_roc = plt.subplots(figsize=(6, 4))
-    ax_roc.plot(fpr, tpr, color='darkorange', lw=2, label=f'Curva ROC (AUC = {roc_auc:.4f})')
-    ax_roc.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
-    ax_roc.set_xlim([0.0, 1.0])
-    ax_roc.set_ylim([0.0, 1.05])
-    ax_roc.set_xlabel('Tasa de Falsos Positivos (FPR)')
-    ax_roc.set_ylabel('Tasa de Verdaderos Positivos (TPR)')
-    ax_roc.set_title('Curva ROC')
-    ax_roc.legend(loc="lower right")
-    figs.append(fig_roc)
-    plt.close(fig_roc)
-    
-    # 7) Curva Precision-Recall (Eliminar)
-    # **Eliminado según solicitud**
+        fig_roc, ax_roc = plt.subplots(figsize=(6, 5))
+        sns.lineplot(x=fpr, y=tpr, label=f'AUC = {roc_auc:.2f}', ax=ax_roc)
+        ax_roc.plot([0, 1], [0, 1], 'k--')  # Línea diagonal
+        ax_roc.set_xlabel("Tasa de Falsos Positivos (FPR)")
+        ax_roc.set_ylabel("Tasa de Verdaderos Positivos (TPR)")
+        ax_roc.set_title(f"Curva ROC - {model_name}")
+        ax_roc.legend(loc='lower right')
+        figuras.append(fig_roc)
 
-    # 8a) Recuento de TN, FP, FN, TP
-    fig_counts, ax_counts = plt.subplots(figsize=(6, 4))
-    counts = [cm_best[0, 0], cm_best[0, 1], cm_best[1, 0], cm_best[1, 1]]
-    labels = ["TN", "FP", "FN", "TP"]
-    colors = ["blue", "red", "orange", "green"]
-    sns.barplot(x=labels, y=counts, palette=colors, ax=ax_counts)
-    ax_counts.set_title("Recuento de TN, FP, FN, TP")
-    ax_counts.set_xlabel("")
-    ax_counts.set_ylabel("Cantidad")
-    for i, v in enumerate(counts):
-        ax_counts.text(i, v + max(counts)*0.01, str(v), ha='center', va='bottom', fontsize=12)
-    fig_counts.tight_layout()
-    figs.append(fig_counts)
-    plt.close(fig_counts)
-    
-    # 8b) Feature Importances
-    if hasattr(modelo, "feature_importances_"):
-        fi = modelo.feature_importances_
-        top_k = 10
-        top_indices = np.argsort(fi)[::-1][:top_k]
-        
-        # Verificar si X es un DataFrame
-        if isinstance(X, pd.DataFrame):
-            feature_names = X.columns
-        else:
-            feature_names = [f"Feature {i}" for i in range(X.shape[1])]
-        
-        # Asegurar que el número de features coincide
-        if len(feature_names) != len(fi):
-            st.error("El número de importancias de características no coincide con el número de columnas en X.")
-        else:
-            top_features = [feature_names[i] for i in top_indices]
-            top_importances = fi[top_indices]
-        
-            fig_importances, ax_importances = plt.subplots(figsize=(10, 8))
-            sns.barplot(x=top_importances, y=top_features, palette='viridis', ax=ax_importances)
-            ax_importances.set_title("Top 10 Importancias de Características")
-            ax_importances.set_xlabel("Importancia")
-            ax_importances.set_ylabel("Características")
-            
-            # Añadir etiquetas con los valores de importancia
-            for index, value in enumerate(top_importances):
-                ax_importances.text(value + max(top_importances)*0.01, index, f"{value:.4f}", va='center', fontsize=10)
-            
-            fig_importances.tight_layout()
-            figs.append(fig_importances)
-            plt.close(fig_importances)
-    else:
-        st.warning("El modelo no tiene atributo 'feature_importances_'")
-    
-    return figs
+    # 5. Importancia de Características (Solo para modelos que lo soportan, como XGBoost)
+    if hasattr(model, "feature_importances_"):
+        importances = model.feature_importances_
+        feature_names = X_test.columns if isinstance(X_test, pd.DataFrame) else [f"Feature {i}" for i in range(X_test.shape[1])]
+        feature_importance_df = pd.DataFrame({
+            'Feature': feature_names,
+            'Importance': importances
+        }).sort_values(by='Importance', ascending=False).head(20)  # Top 20
+
+        fig_imp, ax_imp = plt.subplots(figsize=(10, 8))
+        sns.barplot(x='Importance', y='Feature', data=feature_importance_df, ax=ax_imp, palette='viridis')
+        ax_imp.set_title(f"Importancia de Características - {model_name}")
+        ax_imp.set_xlabel("Importancia")
+        ax_imp.set_ylabel("Características")
+        figuras.append(fig_imp)
+
+    # 6. Distribución de Probabilidades por Clase
+    if y_proba is not None:
+        fig_dist, ax_dist = plt.subplots(figsize=(8, 6))
+        sns.kdeplot(y_proba[y_test == 1], label="Clase 1", shade=True, ax=ax_dist)
+        sns.kdeplot(y_proba[y_test == 0], label="Clase 0", shade=True, ax=ax_dist)
+        ax_dist.set_xlabel("Probabilidad Predicha")
+        ax_dist.set_ylabel("Densidad")
+        ax_dist.set_title(f"Distribución de Probabilidades por Clase - {model_name}")
+        ax_dist.legend()
+        figuras.append(fig_dist)
+
+    return figuras
