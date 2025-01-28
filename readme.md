@@ -117,3 +117,7 @@ Las contribuciones son bienvenidas. Por favor, abre un issue o envía un pull re
 ## Contacto
 
 Para cualquier consulta o sugerencia, por favor contacta a [manuellopezonline@gmail.com](mailto:manuellopezonline@gmail.com).
+
+## Próximamente
+
+- Posibilidad de añadir una URL y devolver la predicción.
