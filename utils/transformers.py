@@ -398,4 +398,60 @@ class RemoveBinaryDuplicates(BaseEstimator, TransformerMixin):
             print(f"Columnas redundantes eliminadas: {cols_to_remove}")
         return X.drop(columns=cols_to_remove, errors='ignore')
 
+from sklearn.base import BaseEstimator, RegressorMixin
+from xgboost import XGBRegressor
+from sklearn_compat.utils.validation import validate_data
+from sklearn_compat.utils import get_tags
 
+class SklearnXGBRegressor(BaseEstimator, RegressorMixin):
+    """
+    Wrapper de XGBRegressor compatible con scikit-learn 1.6+.
+    """
+
+    _estimator_type = "regressor"  # ✅ Confirmamos que es un regresor
+
+    def __init__(self, **kwargs):
+        self.model = XGBRegressor(**kwargs)  # ✅ Creamos la instancia interna de XGBRegressor
+
+    def fit(self, X, y, **kwargs):
+        """
+        Ajusta el modelo con validación compatible con scikit-learn 1.6.
+        """
+        X, y = validate_data(self, X=X, y=y, ensure_all_finite=True)
+        self.model.fit(X, y, **kwargs)
+        return self
+
+    def predict(self, X):
+        """
+        Realiza predicciones sobre los datos de entrada.
+        """
+        X = validate_data(self, X=X, ensure_all_finite=True)
+        return self.model.predict(X)
+
+    def score(self, X, y):
+        """
+        Calcula el coeficiente de determinación R^2 para evaluar el modelo.
+        """
+        from sklearn.metrics import r2_score
+        return r2_score(y, self.predict(X))
+
+    def get_params(self, deep=True):
+        """
+        Obtiene los hiperparámetros del modelo.
+        """
+        return self.model.get_params(deep=deep)
+
+    def set_params(self, **params):
+        """
+        Establece los hiperparámetros del modelo.
+        """
+        self.model.set_params(**params)
+        return self
+
+    def __sklearn_tags__(self):
+        """
+        Define etiquetas de compatibilidad para scikit-learn 1.6.
+        """
+        tags = get_tags(self.model)  # ✅ Ahora lo aplicamos directamente al modelo interno
+        tags["requires_positive_X"] = False  # Ejemplo: Asegurar que admite valores negativos
+        return tags

@@ -6,6 +6,8 @@ import joblib
 import matplotlib.pyplot as plt
 import seaborn as sns
 import warnings
+import os
+
 
 
 # Silenciar advertencias específicas
@@ -22,6 +24,7 @@ from sklearn.metrics import (
 # 1) Carga de clases personalizadas (engañando a joblib)
 # -------------------------------------------------------------------
 import utils.transformers
+from scripts.extract_url_features import extract_variables_from_url
 
 # Importa todas las clases necesarias desde utils.transformers
 page_rank_condition = utils.transformers.page_rank_condition
@@ -54,13 +57,13 @@ class RemoveBinaryDuplicates(utils.transformers.RemoveBinaryDuplicates):
     pass
 
 # -------------------------------------------------------------------
-# 2) Función avanzada de evaluación (retorna figuras)
+# 2) Funciónes avanzada
 # -------------------------------------------------------------------
 from utils.functions import evaluar_modelo_completo
 
-# Importar funciones auxiliares para la extraccion de variables
 
-#from utils.extract_url_features import extraer_variables_url
+
+
 
 # -------------------------------------------------------------------
 # 3) Función para mostrar métricas sencillas
@@ -147,8 +150,52 @@ def descargar_predicciones(df, key):
         key=key  # Asignar el key único aquí
     )
 
+#---------------------------------------------------------------------------------------------------
+# 7) Funcion para detectar el protocolo
+#---------------------------------------------------------------------------------------------------
+import requests
+
+def detect_protocol(url):
+    """
+    Intenta determinar si la URL funciona con HTTPS o HTTP.
+    - Si el usuario ya incluye 'http://' o 'https://', la devuelve tal cual.
+    - Si no, prueba primero con HTTPS y luego con HTTP.
+    - Si ambas fallan, devuelve None.
+    """
+    if url.startswith(("http://", "https://")):
+        return url  # ✅ Si ya tiene protocolo, no tocamos nada
+
+    url_https = "https://" + url
+    url_http = "http://" + url
+
+    try:
+        # 🔍 Intentamos acceder con HTTPS primero
+        response = requests.head(url_https, allow_redirects=True, timeout=3)
+        if response.status_code < 400:
+            return url_https  # ✅ Si funciona con HTTPS, lo usamos
+    except requests.RequestException:
+        pass
+
+    try:
+        # 🔍 Si HTTPS falla, probamos con HTTP
+        response = requests.head(url_http, allow_redirects=True, timeout=3)
+        if response.status_code < 400:
+            return url_http  # ✅ Si funciona con HTTP, lo usamos
+    except requests.RequestException:
+        pass
+
+    return None  # ❌ Si ambas fallan, la URL no es accesible
+
+# ---------------- PERSISTENCIA DE PESTAÑA ----------------
+
+# Si la clave "active_tab" no está en session_state, inicializarla
+if "active_tab" not in st.session_state:
+    st.session_state["active_tab"] = "Check URL"
+
+
+
 # -------------------------------------------------------------------
-# 7) Lógica principal
+# 8) Lógica principal
 # -------------------------------------------------------------------
 def main():
     st.title("Sistema de Detección de URLs Phishing :lock:")
@@ -194,7 +241,11 @@ def main():
         thr = st.session_state["threshold"]
     
     # Crear tabs
+    # Crear pestañas con estado persistente
+
+    tab_selected = st.session_state["active_tab"]
     tab1, tab2, tab3, tab4, tab5 = st.tabs(["📄 Vista de Datos", "📊 Predicción & Métricas", "📈 Análisis Avanzado", "🆚 Comparativa Modelos", "🔍 Predicción por URL"])
+    
     
     # ---------------- TAB 1: Vista de Datos ----------------
     with tab1:
@@ -652,38 +703,185 @@ def main():
 
     # ---------------- TAB 5: Check URL ----------------
     with tab5:
-        # Pestaña de predicción por URL
-        st.subheader("PROXIMAMENTE FUNCIONAL")
-        '''input_url = st.text_input("URL", placeholder="https://ejemplo.com")
-        
-        if st.button("Predecir"):
+        st.subheader("🔎 Detección de Phishing en URLs")
+
+        # Entrada de la URL
+        input_url = st.text_input("Introduce la URL:", placeholder="https://ejemplo.com")
+
+        if st.button("🔍 Analizar URL"):
             if input_url:
-                try:
-                    # Extraer variables de la URL
-                    df_url = extraer_variables_url(input_url)
+                detected_url = detect_protocol(input_url)  # 🔍 Detectamos HTTP o HTTPS
 
-                    # Verificar si el pipeline y el modelo están cargados
-                    model = st.session_state.get("model", None)
-                    pipeline = st.session_state.get("pipeline", None)
+                if detected_url:
+                    st.info(f"🔗 Usando la URL detectada: {detected_url}")
 
-                    if pipeline is not None and model is not None:
-                        # Procesar con el pipeline
-                        df_processed = pipeline.transform(df_url)
+                    # Mostrar spinner de carga mientras se procesa la URL
+                    with st.spinner("📡 Analizando la URL, esto puede tardar unos segundos..."):
+                        try:
+                            # Cargar el dataset de entrenamiento
+                            train_df = pd.read_parquet("Data/train.parquet")
 
-                        # Realizar predicción
-                        if hasattr(model, "predict_proba"):
-                            proba = model.predict_proba(df_processed)[:, 1][0]
-                            prediccion = "Phishing" if proba > 0.5 else "Legítima"
-                            st.success(f"La URL es: **{prediccion}**")
-                            st.write(f"**Probabilidad de Phishing:** {proba:.2f}")
-                        else:
-                            st.error("El modelo no soporta `predict_proba`.")
-                    else:
-                        st.error("Modelo o pipeline no cargados. Por favor, cárgalos en la barra lateral.")
-                except Exception as e:
-                    st.error(f"Error al procesar la URL: {e}")
+                            # Extraer variables de la URL
+                            df_url = extract_variables_from_url(detected_url)
+                            df_url = pd.DataFrame([df_url])  # Convertir diccionario en DataFrame
+                            df_url = df_url.apply(pd.to_numeric, errors="ignore")  # Convertir números correctamente
+                            df_url = df_url.astype({col: "int32" for col in df_url.select_dtypes(include=["int8"]).columns})
+
+                            # Asegurar que las columnas estén en el mismo orden que en el modelo entrenado
+                            df_url = df_url[[col for col in train_df.columns if col != "status"]]
+
+                            # Comprobar si la URL devuelve un DataFrame vacío
+                            if df_url.isnull().all().all():
+                                st.warning("⚠️ La URL no existe o es inaccesible.")
+                                st.stop()  # Detener ejecución
+
+                            # Obtener el modelo y el pipeline
+                            model = st.session_state.get("model", None)
+                            pipeline = st.session_state.get("pipeline", None)
+
+                            if pipeline is not None and model is not None:
+                                try:
+                                    # Transformar los datos con el pipeline
+                                    df_processed = pipeline.transform(df_url)
+
+                                    # Intentar obtener las columnas esperadas por el modelo
+                                    try:
+                                        expected_features = model.get_booster().feature_names
+                                    except AttributeError:
+                                        expected_features = df_processed.columns.tolist()  # Alternativa
+
+                                    # Obtener columnas actuales en df_processed
+                                    actual_features = df_processed.columns.tolist()
+
+                                    # Detectar discrepancias
+                                    missing_in_df = set(expected_features) - set(actual_features)
+                                    extra_in_df = set(actual_features) - set(expected_features)
+
+                                    # Si hay discrepancias, mostrarlas y detener ejecución
+                                    if missing_in_df:
+                                        st.error(f"🚨 FALTAN columnas en df_processed: {missing_in_df}")
+                                        st.stop()
+
+                                    if extra_in_df:
+                                        st.warning(f"🚨 Columnas extra en df_processed (pueden ser irrelevantes pero deberían revisarse): {extra_in_df}")
+
+                                    # **Verificación final del orden de las columnas**
+                                    if expected_features != actual_features:
+                                        st.error("🚨 El orden de las columnas NO coincide con lo esperado. Se recomienda revisar la transformación del pipeline.")
+                                        st.stop()
+
+                                    # Realizar la predicción
+                                    if hasattr(model, "predict_proba"):
+                                        proba = model.predict_proba(df_processed)[:, 1][0]
+                                        es_phishing = proba > 0.5
+                                        confianza = proba * 100 if es_phishing else (1 - proba) * 100
+
+                                        # Mostrar resultado
+                                        resultado_texto = "⚠️ **La URL es PHISHING.**" if es_phishing else "✅ **La URL es LEGÍTIMA.**"
+                                        st.markdown(f"### {resultado_texto}")
+                                        st.markdown(f"**Nivel de confianza:** {confianza:.2f}%")
+
+                                        # Información adicional
+                                        st.info(
+                                            "📌 Esta es una predicción basada en modelos de machine learning. "
+                                            "Para conocer la metodología y las métricas, revisa los análisis detallados en las otras pestañas."
+                                        )
+                                    else:
+                                        st.error("❌ El modelo no soporta `predict_proba`.")
+                                except Exception as e:
+                                    st.error(f"❌ Error en pipeline.transform o predict_proba: {e}")
+                            else:
+                                st.error("❌ Modelo o pipeline no cargados. Por favor, cárgalos en la barra lateral.")
+
+                        except Exception as e:
+                            st.error(f"❌ Error al procesar la URL, inténtalo de nuevo más tarde: {e}")
+                else:
+                    st.error("❌ La URL no es accesible. Verifica que la escribiste correctamente o que la web sigue activa.")
             else:
-                st.warning("Por favor, introduce una URL válida.")'''
+                st.warning("⚠️ Por favor, introduce una URL válida.")
+
+
+        # 🔍 Explicación sobre la predicción del tráfico web
+        with st.expander("📊 ¿Cómo se estima el tráfico web?"):
+            st.markdown(
+                """
+                - **El volumen de búsqueda es un valor estimado** usando un modelo de *stacking* basado en el ranking de **Tranco**.
+                - El rendimiento del modelo en pruebas fue:
+                    - **R² = 0.8551**
+                    - **RMSE = 1.34**
+                - Modelos utilizados y sus métricas de error:
+                
+                | **Modelo**               | **RMSE**  | **R²**    |
+                |-------------------------|---------|---------|
+                | Regresión Lineal        | 2.05    | 0.6616  |
+                | Regresión Polinómica    | 2.05    | 0.6616  |
+                | Random Forest           | 1.37    | 0.8495  |
+                | XGBoost                 | 1.58    | 0.7995  |
+                | Stacking                | **1.34** | **0.8551**  |
+                
+                📌 Puedes ver más detalles en el notebook `webtraffic_modelling.ipynb` en el repositorio:
+                🔗 [GitHub - Detector_Phishing](https://github.com/jarkillo/Detector_Phishing)
+                """
+            )
+
+        # 🔍 FAQ y Preguntas Frecuentes
+        with st.expander("❓ ¿Cómo funciona el modelo de detección de phishing?"):
+            st.markdown(
+                """
+                Nuestro modelo de machine learning analiza diversas características de la URL, incluyendo:
+                - **Estructura de la URL** (longitud, caracteres sospechosos, subdominios, etc.)
+                - **Contenido de la página** (formularios, redirecciones, enlaces sospechosos, etc.)
+                - **Información del dominio** (edad del dominio, registro WHOIS, DNS, etc.)
+                - **Trafico web estimado** (basado en ranking de Tranco)
+
+                Luego, usamos un **modelo predictivo entrenado con datos de phishing y sitios legítimos** para estimar la probabilidad de que la URL sea maliciosa.
+                """
+            )
+
+        with st.expander("❓ ¿Qué significa la probabilidad mostrada?"):
+            st.markdown(
+                """
+                - Si la probabilidad es mayor al **50%**, consideramos que la URL **puede ser phishing**.
+                - Si la probabilidad es menor al **50%**, la URL **parece legítima**.
+                - El número mostrado indica la **confianza del modelo** en la predicción.
+                
+                📌 **IMPORTANTE**: Este es un sistema de predicción basado en datos previos. Siempre verifica manualmente antes de ingresar información sensible en una página.
+                """
+            )
+
+        with st.expander("❓ ¿Cómo puedo saber si una página es segura?"):
+            st.markdown(
+                """
+                Aquí tienes algunas recomendaciones básicas:
+                ✅ **Revisa la URL:** Evita sitios con caracteres raros o dominios extraños.  
+                ✅ **Comprueba el certificado SSL:** Asegúrate de que usa **HTTPS**.  
+                ✅ **No ingreses datos personales sin verificar:** Especialmente en emails sospechosos.  
+                ✅ **Desconfía de enlaces acortados:** Pueden ocultar la dirección real.  
+                ✅ **Busca señales de autenticidad:** Logos, contacto real, políticas de privacidad.  
+                
+                Si tienes dudas, **usa nuestro detector de phishing antes de hacer clic en enlaces desconocidos**.
+                """
+            )
+
+        with st.expander("❓ ¿Este sistema detecta el 100% de los ataques de phishing?"):
+            st.markdown(
+                """
+                ❌ No, ningún sistema es 100% perfecto.  
+                🚀 Sin embargo, este modelo **ha sido entrenado con miles de ejemplos reales** y tiene una alta precisión.  
+                📌 Aún así, **recomendamos siempre verificar manualmente** antes de ingresar información sensible.  
+                """
+            )
+
+        with st.expander("❓ ¿Dónde puedo reportar una URL sospechosa?"):
+            st.markdown(
+                """
+                Si encuentras una URL sospechosa, puedes reportarla en:
+                - **Google Safe Browsing:** [https://safebrowsing.google.com/safebrowsing/report_phish/](https://safebrowsing.google.com/safebrowsing/report_phish/)
+                - **PhishTank:** [https://www.phishtank.com/](https://www.phishtank.com/)
+                - **Microsoft Defender SmartScreen:** [https://www.microsoft.com/en-us/wdsi/support/report-unsafe-site](https://www.microsoft.com/en-us/wdsi/support/report-unsafe-site)
+                """
+            )
+
 
 if __name__ == "__main__":
     main()

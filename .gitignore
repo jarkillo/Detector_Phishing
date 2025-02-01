@@ -1,3 +1,5 @@
 __Pycache__/
 Results/
 backup/
+.env
+.streamlit/
