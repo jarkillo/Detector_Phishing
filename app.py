@@ -322,7 +322,7 @@ def main():
                                         confianza = proba * 100 if es_phishing else (1 - proba) * 100
 
                                         # Mostrar resultado
-                                        resultado_texto = "⚠️ **La URL es PHISHING.**" if es_phishing else "✅ **La URL es LEGÍTIMA.**"
+                                        resultado_texto = "⚠️ **La URL parece ser PHISHING.**" if es_phishing else "✅ **La URL parece ser LEGÍTIMA.**"
                                         st.markdown(f"### {resultado_texto}")
                                         st.markdown(f"**Nivel de confianza:** {confianza:.2f}%")
 
@@ -331,6 +331,14 @@ def main():
                                             "📌 Esta es una predicción basada en modelos de machine learning. "
                                             "Para conocer la metodología y las métricas, revisa los análisis detallados en las otras pestañas."
                                         )
+                                        # Agregar descargo de responsabilidad
+                                        st.markdown("""
+                                        **Descargo de responsabilidad:**  
+                                        La predicción que se muestra es únicamente orientativa y se basa en un modelo de machine learning entrenado con datos históricos.  
+                                        No se garantiza la exactitud absoluta de esta predicción.  
+                                        Por lo tanto, **no se debe tomar ninguna decisión crítica únicamente con base en estos resultados**.  
+                                        El uso de esta herramienta es bajo la responsabilidad del usuario y el desarrollador no asume ningún tipo de responsabilidad por posibles errores o malinterpretaciones.
+                                        """)
                                     else:
                                         st.error("❌ El modelo no soporta `predict_proba`.")
                                 except Exception as e:
@@ -529,6 +537,7 @@ def main():
 
                     # Botón para descargar todas las predicciones
                     descargar_predicciones(df_display, key='download_all_predictions')
+                    st.caption("Las predicciones descargadas son aproximadas y no constituyen un diagnóstico definitivo. Use esta información solo como referencia; el desarrollador no se hace responsable de decisiones basadas en estos datos.")
 
                     # Tabla de predicciones erróneas
                     if y_test is not None:
@@ -881,6 +890,14 @@ def main():
                     st.warning(f"El CSV debe contener al menos las columnas: {', '.join(required_cols)}")
             except Exception as e:
                 st.error(f"Error al procesar el archivo CSV: {e}")
+                
+    st.markdown("---")
+    st.markdown("""
+    **Aviso Legal:**  
+    Esta herramienta de detección de URLs de phishing es solo una herramienta de apoyo y está destinada para fines demostrativos y de investigación.  
+    Los resultados obtenidos son orientativos y no garantizan la detección completa o precisa de todas las amenazas de phishing.  
+    El uso de esta información se realiza bajo la exclusiva responsabilidad del usuario, y el desarrollador no se hace responsable de las decisiones o acciones tomadas basándose únicamente en estas predicciones.
+    """)
 
 if __name__ == "__main__":
     main()
