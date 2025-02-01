@@ -1,6 +1,6 @@
 # Phishing URL Detection System
 
-[Leer Readme en Español](#sistema-de-deteccion-de-urls-phishing)
+[Leer Readme en Español](#espanol)
 
 ## DEMO
 
@@ -181,7 +181,7 @@ Contributions are welcome. Please open an issue or submit a pull request with yo
 For any questions or suggestions, please contact [manuellopezonline@gmail.com](mailto:manuellopezonline@gmail.com).
 
 
-Español
+<a id="espanol"></a>
 
 # Sistema de Detección de URLs Phishing
 
