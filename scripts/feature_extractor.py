@@ -17,7 +17,7 @@ import re
 from dotenv import load_dotenv
 import os
 import sys
-
+from scripts.content_features import safe_request
 
 # Asegurar que el directorio raíz está en sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -83,7 +83,7 @@ def is_URL_accessible(url, timeout=10):
     """
     try:
         # Intentamos acceder a la URL
-        response = requests.get(url, timeout=timeout)
+        response = safe_request(url, timeout=timeout)
         # Si se obtiene un 404, imprimimos un mensaje amigable y retornamos False
         if response.status_code == 404:
             print(f"❌ La URL {url} respondió con un 404 (página no encontrada).")
@@ -109,11 +109,11 @@ def getPageContent(url):
     parsed = urlparse(url)
     url = parsed.scheme+'://'+parsed.netloc
     try:
-        page = requests.get(url)
+        page = safe_request(url)
     except:
         if not parsed.netloc.startswith('www'):
             url = parsed.scheme+'://www.'+parsed.netloc
-            page = requests.get(url)
+            page = safe_request(url)
     if page.status_code != 200:
         return None, None
     else:    

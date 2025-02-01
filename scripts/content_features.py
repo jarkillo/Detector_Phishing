@@ -3,6 +3,28 @@ import re
 
 
 #################################################################################################################################
+#               Safe request
+#################################################################################################################################
+import requests
+
+import requests
+
+def safe_request(url, timeout=5):
+    """ Realiza una petición GET con headers anti-bots y maneja excepciones. """
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
+    }
+    
+    try:
+        response = requests.get(url, headers=headers, timeout=timeout)
+        if response.status_code < 400:
+            return response
+    except requests.RequestException:
+        pass  # No lanzamos error, simplemente devolvemos None
+    return None
+
+
+#################################################################################################################################
 #               Number of hyperlinks present in a website (Kumar Jain'18)
 #################################################################################################################################
 
@@ -92,43 +114,41 @@ def external_css(CSS):
 def h_i_redirect(Href, Link, Media, Form, CSS, Favicon):
     count = 0
     for link in Href['internals']:
-        try:
-            r = requests.get(link)
-            if len(r.history) > 0:
-                count+=1
-        except:
-            continue
+        r = safe_request(link)  # 🆕 Usamos `safe_request()`
+        if r and len(r.history) > 0:
+            count += 1
+
     for link in Link['internals']:
         try:
-            r = requests.get(link)
+            r = safe_request(link)
             if len(r.history) > 0:
                 count+=1
         except:
             continue
     for link in Media['internals']:
         try:
-            r = requests.get(link)
+            r = safe_request(link)
             if len(r.history) > 0:
                 count+=1
         except:
             continue
     for link in Form['internals']:
         try:
-            r = requests.get(link)
+            r = safe_request(link)
             if len(r.history) > 0:
                 count+=1
         except:
             continue
     for link in CSS['internals']:
         try:
-            r = requests.get(link)
+            r = safe_request(link)
             if len(r.history) > 0:
                 count+=1
         except:
             continue
     for link in Favicon['internals']:
         try:
-            r = requests.get(link)
+            r = safe_request(link)
             if len(r.history) > 0:
                 count+=1
         except:
@@ -137,8 +157,13 @@ def h_i_redirect(Href, Link, Media, Form, CSS, Favicon):
 
 def internal_redirection(Href, Link, Media, Form, CSS, Favicon):
     internals = h_internal(Href, Link, Media, Form, CSS, Favicon)
-    if (internals>0):
-        return h_i_redirect(Href, Link, Media, Form, CSS, Favicon)/internals
+    if internals > 0:
+        count = 0
+        for link in Href["internals"] + Link["internals"] + Media["internals"] + Form["internals"] + CSS["internals"] + Favicon["internals"]:
+            r = safe_request(link)  # 🆕 Cambiamos `requests.get()` por `safe_request()`
+            if r and len(r.history) > 0:
+                count += 1
+        return count / internals
     return 0
 
 #################################################################################################################################
@@ -150,49 +175,49 @@ def h_e_redirect(Href, Link, Media, Form, CSS, Favicon):
     count = 0
     for link in Href['externals']:
         try:
-            r = requests.get(link)
+            r = safe_request(link)
             if len(r.history) > 0:
                 count+=1
         except:
             continue
     for link in Link['externals']:
         try:
-            r = requests.get(link)
+            r = safe_request(link)
             if len(r.history) > 0:
                 count+=1
         except:
             continue
     for link in Media['externals']:
         try:
-            r = requests.get(link)
+            r = safe_request(link)
             if len(r.history) > 0:
                 count+=1
         except:
             continue
     for link in Media['externals']:
         try:
-            r = requests.get(link)
+            r = safe_request(link)
             if len(r.history) > 0:
                 count+=1
         except:
             continue 
     for link in Form['externals']:
         try:
-            r = requests.get(link)
+            r = safe_request(link)
             if len(r.history) > 0:
                 count+=1
         except:
             continue    
     for link in CSS['externals']:
         try:
-            r = requests.get(link)
+            r = safe_request(link)
             if len(r.history) > 0:
                 count+=1
         except:
             continue    
     for link in Favicon['externals']:
         try:
-            r = requests.get(link)
+            r = safe_request(link)
             if len(r.history) > 0:
                 count+=1
         except:
@@ -215,37 +240,37 @@ def h_i_error(Href, Link, Media, Form, CSS, Favicon):
     count = 0
     for link in Href['internals']:
         try:
-            if requests.get(link).status_code >=400:
+            if safe_request(link).status_code >=400:
                 count+=1
         except:
             continue
     for link in Link['internals']:
         try:
-            if requests.get(link).status_code >=400:
+            if safe_request(link).status_code >=400:
                 count+=1
         except:
             continue
     for link in Media['internals']:
         try:
-            if requests.get(link).status_code >=400:
+            if safe_request(link).status_code >=400:
                 count+=1
         except:
             continue
     for link in Form['internals']:
         try:
-            if requests.get(link).status_code >=400:
+            if safe_request(link).status_code >=400:
                 count+=1
         except:
             continue
     for link in CSS['internals']:
         try:
-            if requests.get(link).status_code >=400:
+            if safe_request(link).status_code >=400:
                 count+=1
         except:
             continue  
     for link in Favicon['internals']:
         try:
-            if requests.get(link).status_code >=400:
+            if safe_request(link).status_code >=400:
                 count+=1
         except:
             continue
@@ -266,37 +291,37 @@ def h_e_error(Href, Link, Media, Form, CSS, Favicon):
     count = 0
     for link in Href['externals']:
         try:
-            if requests.get(link).status_code >=400:
+            if safe_request(link).status_code >=400:
                 count+=1
         except:
             continue
     for link in Link['externals']:
         try:
-            if requests.get(link).status_code >=400:
+            if safe_request(link).status_code >=400:
                 count+=1
         except:
             continue
     for link in Media['externals']:
         try:
-            if requests.get(link).status_code >=400:
+            if safe_request(link).status_code >=400:
                 count+=1
         except:
             continue
     for link in Form['externals']:
         try:
-            if requests.get(link).status_code >=400:
+            if safe_request(link).status_code >=400:
                 count+=1
         except:
             continue
     for link in CSS['externals']:
         try:
-            if requests.get(link).status_code >=400:
+            if safe_request(link).status_code >=400:
                 count+=1
         except:
             continue
     for link in Favicon['externals']:
         try:
-            if requests.get(link).status_code >=400:
+            if safe_request(link).status_code >=400:
                 count+=1
         except:
             continue
