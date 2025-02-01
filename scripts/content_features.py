@@ -7,8 +7,6 @@ import re
 #################################################################################################################################
 import requests
 
-import requests
-
 def safe_request(url, timeout=5):
     """ Realiza una petición GET con headers anti-bots y maneja excepciones. """
     headers = {
