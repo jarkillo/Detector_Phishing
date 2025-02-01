@@ -16,27 +16,68 @@ Este proyecto implementa un sistema de detección de URLs de phishing utilizando
 ## Estructura del Proyecto
 
 ```plaintext
-.
-├── app.py
-├── requirements.txt
-├── scripts
-│   └── convert_to_parquet.py
-├── Notebook
-│   ├── Phising_EDA.ipynb
-│   └── Phishing_modelling.ipynb
-├── Modelos
-│   ├── mejor_modelo.pkl
-│   ├── mejor_pipeline.pkl
-│   └── metadatos.pkl
-├── Data
-│   ├── comparativa_modelos.csv
-│   ├── test_dataset_F.csv
-│   ├── test.parquet
-│   ├── train.csv
-│   └── train.parquet
-└── utils
-    ├── functions.py
-    └── transformers.py
+# Estructura del Proyecto
+
+## 📂 Data
+- `allbrands.txt`
+- `comparativa_modelos.csv`
+- `test_dataset_F.csv`
+- `test.parquet`
+- `train_with_estimated_web_traffic.csv`
+- `train_with_predicted_traffic.csv`
+- `train_with_tranco.csv`
+- `train.csv`
+- `train.parquet`
+- `tranco_list.csv`
+
+## 📂 Modelos
+- `__init__.py`
+- `mejor_modelo.pkl`
+- `mejor_pipeline.pkl`
+- `metadatos.pkl`
+- `web_traffic_stacking.pkl`
+
+## 📂 Notebooks
+- `Informe Final.docx`
+- `Informe Final.pdf`
+- `Phishing_modelling.ipynb`
+- `Phising_EDA.ipynb`
+- `webtraffic_modelling.ipynb`
+
+## 📂 Results
+_(Carpeta vacía o sin listar archivos)_
+
+## 📂 scripts
+- `__init__.py`
+- `content_features.py`
+- `external_features.py`
+- `extract_url_features.py`
+- `feature_extractor.py`
+- `pandas2arff.py`
+- `url_features.py`
+
+## 📂 tests
+- `__init__.py`
+- `check_variables.py`
+- `test_extract_features.py`
+- `test_results.json`
+
+## 📂 tools
+- `convert_to_parquet.py`
+- `tranco_dataset_building.py`
+
+## 📂 utils
+- `__init__.py`
+- `functions.py`
+- `transformers.py`
+
+## Archivos en la raíz
+- `.env`
+- `.gitignore`
+- `app.py`
+- `readme.md`
+- `requirements.txt`
+- `search_history.json`
 ```
 
 ## Instalación
