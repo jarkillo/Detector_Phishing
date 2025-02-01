@@ -158,6 +158,7 @@ import requests
 def detect_protocol(url):
     """
     Intenta determinar si la URL funciona con HTTPS o HTTP.
+    - Usa headers para evitar bloqueos de bots.
     - Si el usuario ya incluye 'http://' o 'https://', la devuelve tal cual.
     - Si no, prueba primero con HTTPS y luego con HTTP.
     - Si ambas fallan, devuelve None.
@@ -168,9 +169,17 @@ def detect_protocol(url):
     url_https = "https://" + url
     url_http = "http://" + url
 
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.99 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.google.com/",
+        "DNT": "1",  # Do Not Track (simula comportamiento de usuario)
+        "Connection": "keep-alive"
+    }
+
     try:
         # 🔍 Intentamos acceder con HTTPS primero
-        response = requests.head(url_https, allow_redirects=True, timeout=3)
+        response = requests.head(url_https, headers=headers, allow_redirects=True, timeout=5)
         if response.status_code < 400:
             return url_https  # ✅ Si funciona con HTTPS, lo usamos
     except requests.RequestException:
@@ -178,7 +187,7 @@ def detect_protocol(url):
 
     try:
         # 🔍 Si HTTPS falla, probamos con HTTP
-        response = requests.head(url_http, allow_redirects=True, timeout=3)
+        response = requests.head(url_http, headers=headers, allow_redirects=True, timeout=5)
         if response.status_code < 400:
             return url_http  # ✅ Si funciona con HTTP, lo usamos
     except requests.RequestException:
