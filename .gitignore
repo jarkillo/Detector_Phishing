@@ -3,3 +3,6 @@ Results/
 backup/
 .env
 .streamlit/
+Notebooks/Informe Final.docx
+Notebooks/Informe Final.pdf
+tests/test_request.py
