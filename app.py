@@ -244,11 +244,11 @@ def main():
     # Crear pestañas con estado persistente
 
     tab_selected = st.session_state["active_tab"]
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📄 Vista de Datos", "📊 Predicción & Métricas", "📈 Análisis Avanzado", "🆚 Comparativa Modelos", "🔍 Predicción por URL"])
+    tab2, tab3, tab4, tab5, tab1 = st.tabs(["📄 Vista de Datos", "📊 Predicción & Métricas", "📈 Análisis Avanzado", "🆚 Comparativa Modelos", "🔍 Predicción por URL"])
     
     
     # ---------------- TAB 1: Vista de Datos ----------------
-    with tab1:
+    with tab2:
         st.subheader("Vista Preliminar del Dataset")
         df_data = st.session_state.get("df_data", None)
         if df_data is not None:
@@ -278,7 +278,7 @@ def main():
             st.info("Selecciona y carga un dataset en la barra lateral para ver sus datos aquí.")
     
     # ---------------- TAB 2: Predicción & Métricas ----------------
-    with tab2:
+    with tab3:
         st.subheader("Generar Predicciones y Ver Métricas Básicas")
         model = st.session_state.get("model", None)
         pipeline = st.session_state.get("pipeline", None)
@@ -417,7 +417,7 @@ def main():
             st.info("Debes cargar un dataset y haber cargado el modelo/pipeline para ver métricas.")
     
     # ---------------- TAB 3: Análisis Avanzado ----------------
-    with tab3:
+    with tab4:
         st.subheader("Análisis Avanzado del Modelo (Errores y Fortalezas)")
         model = st.session_state.get("model", None)
         pipeline = st.session_state.get("pipeline", None)
@@ -590,7 +590,7 @@ def main():
             st.info("Debes cargar un dataset y haber cargado el modelo/pipeline para realizar el análisis avanzado.")
 
     # ---------------- TAB 4: Comparativa de Modelos ----------------
-    with tab4:
+    with tab5:
         st.subheader("Comparación de Varios Modelos")
         st.write("Sube un CSV con métricas de distintos modelos para compararlos.")
         comp_file = st.file_uploader("Subir CSV de Comparativa", key="comp", type=["csv"])
@@ -701,8 +701,8 @@ def main():
             except Exception as e:
                 st.error(f"Error al procesar el archivo CSV: {e}")
 
-    # ---------------- TAB 5: Check URL ----------------
-    with tab5:
+    # ---------------- TAB 1: Check URL ----------------
+    with tab1:
         st.subheader("🔎 Detección de Phishing en URLs")
 
         # Entrada de la URL
