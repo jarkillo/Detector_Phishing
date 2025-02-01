@@ -244,9 +244,9 @@ def main():
     # Crear pestañas con estado persistente
 
     tab_selected = st.session_state["active_tab"]
-    tab2, tab3, tab4, tab5, tab1 = st.tabs(["🔍 Predicción por URL", "📄 Vista de Datos", "📊 Predicción & Métricas", "📈 Análisis Avanzado", "🆚 Comparativa Modelos"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["🔍 Predicción por URL", "📄 Vista de Datos", "📊 Predicción & Métricas", "📈 Análisis Avanzado", "🆚 Comparativa Modelos"])
     
-        # ---------------- TAB 1: Check URL ----------------
+    # ---------------- TAB 1: Check URL ----------------
     with tab1:
         st.subheader("🔎 Detección de Phishing en URLs")
 
