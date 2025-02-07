@@ -180,7 +180,7 @@ def detect_protocol(url):
 
     try:
         # 🔍 Intentamos acceder con `GET` en lugar de `HEAD`
-        response = safe_request(url_https, headers=headers, timeout=5)
+        response = safe_request(url_https, timeout=5)
         if response.status_code < 400:
             return url_https  # ✅ Si funciona con HTTPS, lo usamos
     except requests.RequestException:
@@ -188,7 +188,7 @@ def detect_protocol(url):
 
     try:
         # 🔍 Si HTTPS falla, probamos con HTTP
-        response = safe_request(url_http, headers=headers, timeout=5)
+        response = safe_request(url_http, timeout=5)
         if response.status_code < 400:
             return url_http  # ✅ Si funciona con HTTP, lo usamos
     except requests.RequestException:
@@ -912,3 +912,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
