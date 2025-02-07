@@ -180,11 +180,11 @@ def detect_protocol(url):
 
     try:
         # 🔍 Intentamos acceder con `GET` en lugar de `HEAD`
-        response = safe_request(url_https, timeout=5)
+        response = safe_request(url_https, headers=headers, timeout=5)
         if response.status_code < 400:
             return url_https  # ✅ Si funciona con HTTPS, lo usamos
     except requests.RequestException:
-        pass
+        pass        
 
     try:
         # 🔍 Si HTTPS falla, probamos con HTTP
@@ -278,7 +278,11 @@ def main():
                             train_df = pd.read_parquet("Data/train.parquet")
 
                             # Extraer variables de la URL
+                            print(f"📌 Enviando URL a extract_variables_from_url: {detected_url}")
+
                             df_url = extract_variables_from_url(detected_url)
+                            print(f"📌 DataFrame generado:\n{df_url}")
+
                             df_url = pd.DataFrame([df_url])  # Convertir diccionario en DataFrame
                             df_url = df_url.apply(pd.to_numeric, errors="ignore")  # Convertir números correctamente
                             df_url = df_url.astype({col: "int32" for col in df_url.select_dtypes(include=["int8"]).columns})
