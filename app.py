@@ -164,14 +164,24 @@ def detect_protocol(url):
     - Si no, prueba primero con HTTPS y luego con HTTP.
     - Si ambas fallan, devuelve None.
     """
-    if url.startswith(("http://", "https://")):
-        return url  # ✅ Si ya tiene protocolo, no tocamos nada
+    if not url:
+        print("⚠️ URL vacía o None.")
+        return None
 
-    url_https = "https://" + url
-    url_http = "http://" + url
+    # Asegurar que no haya espacios ni caracteres extraños
+    url = url.strip()
+
+    # Si el usuario ya ha puesto 'http://' o 'https://', la usamos tal cual
+    if url.startswith(("http://", "https://")):
+        print(f"✅ URL detectada directamente con protocolo: {url}")
+        return url  
+
+    # Si la URL no tiene protocolo, probamos primero con HTTPS y luego con HTTP
+    url_https = f"https://{url}"
+    url_http = f"http://{url}"
 
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.99 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36",
         "Accept-Language": "en-US,en;q=0.9",
         "Referer": "https://www.google.com/",
         "DNT": "1",
@@ -179,22 +189,27 @@ def detect_protocol(url):
     }
 
     try:
-        # 🔍 Intentamos acceder con `GET` en lugar de `HEAD`
-        response = safe_request(url_https, headers=headers, timeout=5)
-        if response.status_code < 400:
-            return url_https  # ✅ Si funciona con HTTPS, lo usamos
-    except requests.RequestException:
-        pass        
+        response = safe_request(url_https, timeout=5)
+        if response and response.status_code < 400:
+            print(f"✅ HTTPS funciona: {url_https}")
+            return url_https
+        elif response:
+            print(f"⚠️ HTTPS devuelve código {response.status_code}")
+    except Exception as e:
+        print(f"❌ Error en HTTPS: {e}")
 
     try:
-        # 🔍 Si HTTPS falla, probamos con HTTP
         response = safe_request(url_http, timeout=5)
-        if response.status_code < 400:
-            return url_http  # ✅ Si funciona con HTTP, lo usamos
-    except requests.RequestException:
-        pass
+        if response and response.status_code < 400:
+            print(f"✅ HTTP funciona: {url_http}")
+            return url_http
+        elif response:
+            print(f"⚠️ HTTP devuelve código {response.status_code}")
+    except Exception as e:
+        print(f"❌ Error en HTTP: {e}")
 
-    return None  # ❌ Si ambas fallan, la URL no es accesible
+    print("❌ Ningún protocolo funciona para esta URL")
+    return None
 
 
 # ---------------- PERSISTENCIA DE PESTAÑA ----------------
